@@ -72,7 +72,7 @@ class uzh_mensa:
                 if condition not in mensa['title'].lower() and condition not in mensa['infoUrlSlug'].lower():
                     continue
             print(bcolors.OKGREEN, bcolors.BOLD, mensa['title'], bcolors.ENDC)
-            weekday = target_date.weekday()
+            weekday = target_date.weekday()+1
 
             if self.args.lang == 'en':
                 uzh_url = 'http://zfv.ch/de/menus/rssMenuPlan?menuId={}&dayOfWeek={}'.format(mensa['idSlugEn'], str(weekday))
