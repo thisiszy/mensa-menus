@@ -3,35 +3,32 @@ import urllib.request, json
 from xml.etree.ElementTree import parse, fromstring
 import sys
 import datetime
+import argparse
 #--------------------------------------------------------------------#
-# set to 'en' or 'de'                                                #
-#--------------------------------------------------------------------#
-lang = 'en'
-#--------------------------------------------------------------------#
-# set to 'student', 'staff' or 'extern'
-#--------------------------------------------------------------------#
-prices = 'student'
-#--------------------------------------------------------------------#
-# customize blocked menus here by adding menu names to blocked_menus #
-#--------------------------------------------------------------------#
-blocked_menus = ['Insalata', 'Garden', 'GARDEN', 'natürlich vegi', 'GARDEN ABEND', 'food market vegi', 'Salad Pot', 'Small Salad Pot', 'WOK GREEN']
-#---------------------------------------------------------------------------------#
 # customize groups by modifying the dict below. As a reference, use following ids:#
-# Clausiusbar:                  4
-# Dozentenfoyer                 6
-# Foodtrailer ETZ:              9
-# G-ESSbar:                     11
-# Mensa Polyterrasse:           12
-# Polysnack:                    13
-# Tannenbar:                    14
-# Alumni quattro Lounge:        15
-# food market - pizza pasta:    18
-# food market - green day:      19
-# food market - grill bbQ       20
-# FUSION meal                   21
-# FUSION coffee:                22
-# BELLAVISTA:                   25
-# food&lab:                     28
+# 1: bQm
+# 2: CafeBar
+# 3: Clausiusbar
+# 4: Kiosk CLA
+# 5: Dozentenfoyer
+# 6: Einstein & Zweistein
+# 7: food&lab
+# 8: Archimedes
+# 9: Mensa Polyterrasse
+# 10: Polysnack
+# 11: Tannenbar
+# 12: Eureka Take Away
+# 13: Zwei Grad Bistro
+# 14: Alumni quattro Lounge
+# 15: Bellavista
+# 16: Bistro HPI
+# 17: food market | green day
+# 18: food market | grill bbQ
+# 19: food market | pizza pasta
+# 20: FUSION meal
+# 21: FUSION coffee
+# 22: Rice Up!
+# 23: Octavo
 #
 # for uzh Mensa use 'uzh'
 #---------------------------------------------------------------------------------#
@@ -56,6 +53,103 @@ locations = {
 #--------------------------------------------------------------------#
 # DO NOT MODIFY CODE BELOW                                           #
 #--------------------------------------------------------------------#
+class uzh_mensa:
+    def __init__(self, args, meta_link="https://raw.githubusercontent.com/famoser/Mensa/master/app/src/main/assets/uzh/locations_rss.json"):
+        self.args = args
+        self.uzh_mensa_list = []
+        uzh_meta_data_url = meta_link
+        with urllib.request.urlopen(uzh_meta_data_url) as url:
+            uzh_meta_data = json.loads(url.read().decode())
+            for campus in uzh_meta_data:
+                self.uzh_mensa_list += campus['mensas']
+
+    def print_uzh_menus(self, target_date):
+        for mensa in self.uzh_mensa_list:
+            print(bcolors.OKGREEN, bcolors.BOLD, mensa['title'], bcolors.ENDC)
+            weekday = target_date.weekday()
+
+            if self.args.lang == 'en':
+                uzh_url = 'http://zfv.ch/de/menus/rssMenuPlan?menuId={}&dayOfWeek={}'.format(mensa['idSlugEn'], str(weekday))
+            elif self.args.lang == 'de':
+                uzh_url = 'http://zfv.ch/de/menus/rssMenuPlan?menuId={}&dayOfWeek={}'.format(mensa['idSlugDe'], str(weekday))
+            else:
+                print("Language not supported")
+                sys.exit(1)
+
+            with urllib.request.urlopen(uzh_url) as url:
+                string = url.read().decode()
+                string= string.replace('<br />', '') # fix malformed tags
+                document= fromstring(string) # parse the string
+
+                i = 0
+                if len(document[4][3][0]) != 0:
+                    for child in document[4][3][0]:
+                        if(i%2 == 0):
+                            title = child.text
+                            price = child[0].text
+
+                            cleanTitle = " ".join(title.split())
+                            cleanPrice = " ".join(price.split())[2:10]
+                            print(bcolors.OKBLUE, bcolors.BOLD, cleanTitle, cleanPrice, bcolors.ENDC)
+                        else:
+                            description = child.text
+                            cleanDescription = " ".join(description.split())
+                            print("    ",cleanDescription)
+                        i += 1
+                else:
+                    print(bcolors.BOLD, bcolors.FAIL, mensa['title'], "CLOSED", bcolors.ENDC)
+            print("--------------------------------------------------------------------")
+
+
+class eth_mensa:
+    def __init__(self, args, meta_link='''https://idapps.ethz.ch/cookpit-pub-services/v1/facilities?client-id=ethz-wcms&lang={lang}&rs-first={rs_first}&rs-size={rs_size}''', data_link='''https://idapps.ethz.ch/cookpit-pub-services/v1/weeklyrotas?client-id=ethz-wcms&lang={lang}&rs-first={rs_first}&rs-size={rs_size}&valid-after={valid_after}'''):
+        self.args = args
+        self.meta_link = meta_link
+        self.data_link = data_link
+        facilities = self.request_eth_facilities_list(lang=self.args.lang)
+        facilities.sort(key=lambda x: x['facility-id'])
+        self.id_to_eth_mensa = {f['facility-id']: f for f in facilities}
+
+
+    def request_eth_facilities_list(self, rs_size=50, rs_first=0, lang="en"):
+        eth_url = self.meta_link.format(lang=lang, rs_first=rs_first, rs_size=rs_size)
+        
+        with urllib.request.urlopen(eth_url) as url:
+            data = json.loads(url.read().decode())['facility-array']
+        assert len(data) < rs_size  # if rs_size equals len(data), then there are more facilities to be requested
+
+        return data
+
+    def print_eth_menus(self, target_date):
+        def request_weekly_menus(rs_first, rs_size, valid_after):
+            eth_url = self.data_link.format(lang=self.args.lang, rs_first=rs_first, rs_size=rs_size, valid_after=valid_after)
+            with urllib.request.urlopen(eth_url) as url:
+                data = json.loads(url.read().decode())['weekly-rota-array']
+            
+            return data
+
+        eth_menu_data = request_weekly_menus(0, 50, target_date.strftime("%Y-%m-%d"))
+
+        valid_data = [i for i in eth_menu_data if (datetime.datetime.strptime(i['valid-from'], "%Y-%m-%d").date() <= target_date and ('valid-to' not in i or datetime.datetime.strptime(i['valid-to'], "%Y-%m-%d").date() >= target_date))]
+        valid_data.sort(key=lambda x: x['facility-id'])
+
+        for item in valid_data:
+            target_day_menus = item['day-of-week-array'][target_date.weekday()]
+            for opening_hours in target_day_menus['opening-hour-array']:
+                if opening_hours['meal-time-array'] != []:
+                    print(bcolors.OKGREEN, bcolors.BOLD, self.id_to_eth_mensa[item['facility-id']]['facility-name'], bcolors.ENDC)
+                    for opening_hour in opening_hours['meal-time-array']:
+                        print(bcolors.UNDERLINE, bcolors.BOLD, f"{opening_hour['name']}\t{opening_hour['time-from']}-{opening_hour['time-to']}", bcolors.ENDC)
+                        if 'line-array' in opening_hour:
+                            for meal in opening_hour['line-array']:
+                                if 'meal' in meal:
+                                    print(bcolors.OKBLUE, bcolors.BOLD, f"{meal['name']} | CHF {'/'.join([str(price['price']) for price in meal['meal']['meal-price-array']])}" , bcolors.ENDC)
+                                    meal['meal']['description'] = meal['meal']['description'].replace("\n", " ")
+                                    print(f"  {meal['meal']['name']}  {meal['meal']['description']}")
+                                    print()
+                else:
+                    print(bcolors.BOLD, bcolors.FAIL, self.id_to_eth_mensa[item['facility-id']]['facility-name'], "CLOSED", bcolors.ENDC)
+                print("--------------------------------------------------------------------")
 
 class bcolors:
     HEADER = '\033[95m'
@@ -67,62 +161,32 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def usage():
-    print('usage: "menus ' + bcolors.BOLD + 'location' + bcolors.ENDC + ' [--all]"')
-    print("with possible locations:")
-    for location in locations.keys():
-        print("\t", location)
-    print("")
-    print('add "--all" to ignore blocked menus')
-    sys.exit()
-
-today = datetime.date.today().strftime("%Y-%m-%d")
-hour = datetime.datetime.now().hour
-weekday = datetime.date.today().weekday()
-
-if(hour >= 21):
-    today = (datetime.date.today() + datetime.timedelta(days=1) ).strftime("%Y-%m-%d")
-    weekday += 1
-
-weekday += 1
-
-if(hour >=14 and hour <=20):
-    meal_time = 'dinner'
-    uzh_id = 149
-else:
-    meal_time = 'lunch'
-    uzh_id = 148
-
-if lang == 'en': uzh_id += 505 - 148
-eth_url = 'https://www.webservices.ethz.ch/gastro/v1/RVRI/Q1E1/meals/{}/{}/{}'.format(lang, today, meal_time)
-uzh_url = 'http://zfv.ch/de/menus/rssMenuPlan?menuId={}&dayOfWeek={}'.format(uzh_id, str(weekday))
 
 
-def print_uzh_menus():
-    with urllib.request.urlopen(uzh_url) as url:
-        string = url.read().decode()
-        string= string.replace('<br />', '') # fix malformed tags
-        document= fromstring(string) # parse the string
+# def print_eth_menus(lang, day, mensa, meal_time):
+#     print(bcolors.UNDERLINE, bcolors.BOLD, meal_time.capitalize(), bcolors.ENDC)
+#     eth_url = 'https://www.webservices.ethz.ch/gastro/v1/RVRI/Q1E1/meals/{}/{}/{}'.format(lang, day, meal_time)
+#     with urllib.request.urlopen(eth_url) as url:
+#         data = json.loads(url.read().decode())
 
-        i = 0
-        mensa_name = 'UZH Mensa'
-        if(meal_time == 'dinner'):
-            mensa_name += ' Dinner'
-        print(bcolors.OKGREEN, bcolors.BOLD, mensa_name, bcolors.ENDC)
-        for child in document[4][3][0]:
-            if(i%2 == 0):
-                title = child.text
-                price = child[0].text
+#     potential_mensa = list(filter(lambda menu: menu['id'] == mensa, data))
+#     if potential_mensa:
+#         mensa = potential_mensa[0]
+#         menus = mensa['meals']
 
-                cleanTitle = " ".join(title.split())
-                cleanPrice = " ".join(price.split())[2:10]
-                print(bcolors.OKBLUE, bcolors.BOLD, cleanTitle, cleanPrice, bcolors.ENDC)
-            else:
-                description = child.text
-                cleanDescription = " ".join(description.split())
-                print("    ",cleanDescription)
-            i += 1
-    print()
+#         for menu in menus:
+#             if menu['label'] not in blocked_menus or args.all:
+#                 menu_price = menu['prices'][prices]
+#                 print(bcolors.OKBLUE, bcolors.BOLD, menu['label'] + " | CHF " , menu_price , bcolors.ENDC)
+                
+#                 description = " ".join(menu['description'])
+#                 # remove multiple spaces
+#                 description = " ".join(description.split())
+#                 print("    ",description)
+#             print()
+#     else:
+#         print(bcolors.FAIL, bcolors.BOLD, f"{id_to_eth_mensa[mensa]['facility-name']} doesn't serve {meal_time}", bcolors.ENDC)
+
 
 def match_location(possibilities, choice):
     def subseq_match(a, b):
@@ -146,38 +210,30 @@ def match_location(possibilities, choice):
         return found[0]
     return None
 
-if len(sys.argv) != 2 and len(sys.argv) != 3:
-    usage()
-location = match_location(locations.keys(), sys.argv[1])
-if location is not None:
-    with urllib.request.urlopen(eth_url) as url:
-        data = json.loads(url.read().decode())
+parser = argparse.ArgumentParser()
+parser.add_argument('location', type=str, default=None, help=
+        "select from the following locations(leave blank will output all locations):" + 
+        ',\t'.join([i for i in locations.keys()])
+        )
+parser.add_argument('-d', '--day', type=str, default=None, help="YYYY-MM-DD")
+parser.add_argument('-l', '--lang', type=str, default='en', help="en or de")
+args = parser.parse_args()
 
-        has_printed_at_least_once = 0
-        for mensa in locations[location]:
-            if(mensa == 'uzh'):
-                print_uzh_menus()
-                has_printed_at_least_once = 1
-            else:
-                potential_mensa = list(filter(lambda menu: menu['id'] == mensa, data))
-
-                if potential_mensa:
-                    mensa = potential_mensa[0]
-                    menus = mensa['meals']
-
-                    print(bcolors.OKGREEN, bcolors.BOLD, mensa['mensa'], bcolors.ENDC)
-                    for menu in menus:
-                        if menu['label'] not in blocked_menus or (len(sys.argv) == 3 and sys.argv[2] == "--all"):
-                            menu_price = menu['prices'][prices]
-                            print(bcolors.OKBLUE, bcolors.BOLD, menu['label'] + " | CHF " , menu_price , bcolors.ENDC)
-                            
-                            description = " ".join(menu['description'])
-                            # remove multiple spaces
-                            description = " ".join(description.split())
-                            print("    ",description)
-                    print()
-                    has_printed_at_least_once = 1
-        if not has_printed_at_least_once:
-            print(bcolors.FAIL, "You either added an invalid mensa-id or this mensa doesn't serve dinner", bcolors.ENDC)
+if args.day is None:
+    target_date = datetime.date.today()
 else:
-    usage()
+    target_date = datetime.datetime.strptime(args.day, "%Y-%m-%d").date()
+weekday = target_date.weekday()
+
+emensa = eth_mensa(args)
+umensa = uzh_mensa(args)
+
+location = match_location(locations.keys(), args.location)
+
+if location is not None:
+    # for mensa in locations[location]:
+    #     if(mensa == 'uzh'):
+    emensa.print_eth_menus(target_date)
+    umensa.print_uzh_menus(target_date)
+else:
+    print("location is None")
