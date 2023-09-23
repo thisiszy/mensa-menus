@@ -204,6 +204,8 @@ parser.add_argument('-d', '--day', type=str, default=None, help="YYYY-MM-DD")
 parser.add_argument('-l', '--lang', type=str, default='en', help="en or de")
 args = parser.parse_args()
 args.location = args.location.lower()
+if args.location == 'all':
+    args.location = None
 
 if args.day is None:
     target_date = datetime.date.today()
@@ -214,7 +216,5 @@ weekday = target_date.weekday()
 emensa = eth_mensa(args)
 umensa = uzh_mensa(args)
 
-# for mensa in locations[location]:
-#     if(mensa == 'uzh'):
 emensa.print_eth_menus(target_date, args.location)
 umensa.print_uzh_menus(target_date, args.location)
