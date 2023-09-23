@@ -63,8 +63,11 @@ class uzh_mensa:
             for campus in uzh_meta_data:
                 self.uzh_mensa_list += campus['mensas']
 
-    def print_uzh_menus(self, target_date):
+    def print_uzh_menus(self, target_date, condition=None):
         for mensa in self.uzh_mensa_list:
+            if condition is not None:
+                if condition not in mensa['title'].lower() and condition not in mensa['infoUrlSlug'].lower():
+                    continue
             print(bcolors.OKGREEN, bcolors.BOLD, mensa['title'], bcolors.ENDC)
             weekday = target_date.weekday()
 
@@ -120,7 +123,7 @@ class eth_mensa:
 
         return data
 
-    def print_eth_menus(self, target_date):
+    def print_eth_menus(self, target_date, condition):
         def request_weekly_menus(rs_first, rs_size, valid_after):
             eth_url = self.data_link.format(lang=self.args.lang, rs_first=rs_first, rs_size=rs_size, valid_after=valid_after)
             with urllib.request.urlopen(eth_url) as url:
@@ -136,6 +139,10 @@ class eth_mensa:
         for item in valid_data:
             target_day_menus = item['day-of-week-array'][target_date.weekday()]
             for opening_hours in target_day_menus['opening-hour-array']:
+                if condition is not None:
+                    if condition not in self.id_to_eth_mensa[item['facility-id']]['facility-name'].lower() and \
+                        condition not in self.id_to_eth_mensa[item['facility-id']]['facility-url'].lower():
+                        continue
                 if opening_hours['meal-time-array'] != []:
                     print(bcolors.OKGREEN, bcolors.BOLD, self.id_to_eth_mensa[item['facility-id']]['facility-name'], bcolors.ENDC)
                     for opening_hour in opening_hours['meal-time-array']:
@@ -188,28 +195,6 @@ class bcolors:
 #         print(bcolors.FAIL, bcolors.BOLD, f"{id_to_eth_mensa[mensa]['facility-name']} doesn't serve {meal_time}", bcolors.ENDC)
 
 
-def match_location(possibilities, choice):
-    def subseq_match(a, b):
-        j = 0
-        for c in a:
-            if b[j] == c:
-                j += 1
-            if j >= len(b):
-                break
-        return j == len(b)
-
-    def match(a, b):
-        return a[0] == b[0] and subseq_match(a, b)
-
-    if not choice: return None
-    if choice in possibilities:
-        # Return the full name if it matches
-        return choice
-    found = [p for p in possibilities if match(p, choice)]
-    if len(found) == 1:
-        return found[0]
-    return None
-
 parser = argparse.ArgumentParser()
 parser.add_argument('location', type=str, default=None, help=
         "select from the following locations(leave blank will output all locations):" + 
@@ -218,6 +203,7 @@ parser.add_argument('location', type=str, default=None, help=
 parser.add_argument('-d', '--day', type=str, default=None, help="YYYY-MM-DD")
 parser.add_argument('-l', '--lang', type=str, default='en', help="en or de")
 args = parser.parse_args()
+args.location = args.location.lower()
 
 if args.day is None:
     target_date = datetime.date.today()
@@ -228,12 +214,7 @@ weekday = target_date.weekday()
 emensa = eth_mensa(args)
 umensa = uzh_mensa(args)
 
-location = match_location(locations.keys(), args.location)
-
-if location is not None:
-    # for mensa in locations[location]:
-    #     if(mensa == 'uzh'):
-    emensa.print_eth_menus(target_date)
-    umensa.print_uzh_menus(target_date)
-else:
-    print("location is None")
+# for mensa in locations[location]:
+#     if(mensa == 'uzh'):
+emensa.print_eth_menus(target_date, args.location)
+umensa.print_uzh_menus(target_date, args.location)
