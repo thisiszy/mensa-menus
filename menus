@@ -32,23 +32,23 @@ import argparse
 #
 # for uzh Mensa use 'uzh'
 #---------------------------------------------------------------------------------#
-locations = {
-    'zentrum': [12, 'uzh', 13, 4, 11, 28],
-    'hoengg': [15,18,19,20,21,25],
-    'clausius': [4],
-    'dozentenfoyer': [6],
-    'gessbar': [11],
-    'poly': [12],
-    'polysnack': [13],
-    'alumni': [15],
-    'pizza': [18],
-    'grill': [20],
-    'fusion': [21],
-    'grill': [20],
-    'bellavista': [25],
-    'foodlab': [28],
-    'uzh': ['uzh'],
-}
+# locations = {
+#     'zentrum': [12, 'uzh', 13, 4, 11, 28],
+#     'hoengg': [15,18,19,20,21,25],
+#     'clausius': [4],
+#     'dozentenfoyer': [6],
+#     'gessbar': [11],
+#     'poly': [12],
+#     'polysnack': [13],
+#     'alumni': [15],
+#     'pizza': [18],
+#     'grill': [20],
+#     'fusion': [21],
+#     'grill': [20],
+#     'bellavista': [25],
+#     'foodlab': [28],
+#     'uzh': ['uzh'],
+# }
 
 #--------------------------------------------------------------------#
 # DO NOT MODIFY CODE BELOW                                           #
@@ -137,27 +137,33 @@ class eth_mensa:
         valid_data.sort(key=lambda x: x['facility-id'])
 
         for item in valid_data:
+            if condition is not None:
+                if condition not in self.id_to_eth_mensa[item['facility-id']]['facility-name'].lower() and \
+                    condition not in self.id_to_eth_mensa[item['facility-id']]['facility-url'].lower():
+                    continue
             target_day_menus = item['day-of-week-array'][target_date.weekday()]
-            for opening_hours in target_day_menus['opening-hour-array']:
-                if condition is not None:
-                    if condition not in self.id_to_eth_mensa[item['facility-id']]['facility-name'].lower() and \
-                        condition not in self.id_to_eth_mensa[item['facility-id']]['facility-url'].lower():
-                        continue
-                if opening_hours['meal-time-array'] != []:
-                    print(bcolors.OKGREEN, bcolors.BOLD, self.id_to_eth_mensa[item['facility-id']]['facility-name'], bcolors.ENDC)
-                    for opening_hour in opening_hours['meal-time-array']:
-                        print(bcolors.UNDERLINE, bcolors.BOLD, f"{opening_hour['name']}\t{opening_hour['time-from']}-{opening_hour['time-to']}", bcolors.ENDC)
-                        if 'line-array' in opening_hour:
-                            for meal in opening_hour['line-array']:
-                                if 'meal' in meal:
-                                    print(bcolors.OKBLUE, bcolors.BOLD, f"{meal['name']} | CHF {'/'.join([str(price['price']) for price in meal['meal']['meal-price-array']])}" , bcolors.ENDC)
-                                    meal['meal']['description'] = meal['meal']['description'].replace("\n", " ")
-                                    print(f"  {meal['meal']['name']}  {meal['meal']['description']}")
-                                    print()
-                else:
-                    print(bcolors.BOLD, bcolors.FAIL, self.id_to_eth_mensa[item['facility-id']]['facility-name'], "CLOSED", bcolors.ENDC)
+            is_open = True
+            if 'opening-hour-array' in target_day_menus:
+                for opening_hours in target_day_menus['opening-hour-array']:
+                    if opening_hours['meal-time-array'] != []:
+                        print(bcolors.OKGREEN, bcolors.BOLD, self.id_to_eth_mensa[item['facility-id']]['facility-name'], bcolors.ENDC)
+                        for opening_hour in opening_hours['meal-time-array']:
+                            print(bcolors.UNDERLINE, bcolors.BOLD, f"{opening_hour['name']}\t{opening_hour['time-from']}-{opening_hour['time-to']}", bcolors.ENDC)
+                            if 'line-array' in opening_hour:
+                                for meal in opening_hour['line-array']:
+                                    if 'meal' in meal:
+                                        print(bcolors.OKBLUE, bcolors.BOLD, f"{meal['name']} | CHF {'/'.join([str(price['price']) for price in meal['meal']['meal-price-array']])}" , bcolors.ENDC)
+                                        meal['meal']['description'] = meal['meal']['description'].replace("\n", " ")
+                                        print(f"  {meal['meal']['name']}  {meal['meal']['description']}")
+                                        print()
+                    else:
+                        is_open = False
+            else:
+                is_open = False
+            
+            if not is_open:
+                print(bcolors.BOLD, bcolors.FAIL, self.id_to_eth_mensa[item['facility-id']]['facility-name'], "CLOSED", bcolors.ENDC)
                 print("--------------------------------------------------------------------")
-
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -197,9 +203,7 @@ class bcolors:
 
 parser = argparse.ArgumentParser()
 parser.add_argument('location', type=str, default=None, help=
-        "select from the following locations(leave blank will output all locations):" + 
-        ',\t'.join([i for i in locations.keys()])
-        )
+        "Search any keywords that related to the mensa(use 'all' to print all mensas), e.g.: zentrum, poly, claus, irchel")
 parser.add_argument('-d', '--day', type=str, default=None, help="YYYY-MM-DD")
 parser.add_argument('-l', '--lang', type=str, default='en', help="en or de")
 args = parser.parse_args()
